@@ -8,6 +8,7 @@ typedef enum {
 	LED_Type_RGB,
 	LED_Type_RGBW,
 	LED_Type_External_Module,
+    LED_Type_GRB,
 } LEDType;
 
 typedef struct {
