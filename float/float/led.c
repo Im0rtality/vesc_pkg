@@ -17,7 +17,7 @@
 #define WS2812_ONE			(TIM_PERIOD * 0.7)
 #define BITBUFFER_PAD		1000
 
-uint32_t led_rgb_to_local(uint32_t color, uint8_t brightness, bool rgbw) {
+uint32_t led_rgb_to_local(uint32_t color, uint8_t brightness, LEDType led_type) {
     uint32_t w = (color >> 24) & 0xFF;
     uint32_t r = (color >> 16) & 0xFF;
     uint32_t g = (color >> 8) & 0xFF;
@@ -28,10 +28,15 @@ uint32_t led_rgb_to_local(uint32_t color, uint8_t brightness, bool rgbw) {
     b = (b * brightness) / 100;
     w = (w * brightness) / 100;
 
-    if (rgbw) {
-        return (g << 24) | (r << 16) | (b << 8) | w;
-    } else {
-        return (g << 16) | (r << 8) | b;
+    switch (led_type) {
+        case LED_Type_RGBW:
+            return (g << 24) | (r << 16) | (b << 8) | w;
+        case LED_Type_RGB:
+            return (g << 16) | (r << 8) | b;
+        case LED_Type_GRB:
+            return (r << 16) | (g << 8) | b;
+        default:
+            return 0;
     }
 }
 
@@ -69,6 +74,19 @@ uint32_t led_fade_color(uint32_t from, uint32_t to) {
     fb = stepTowards(fb, tb, 12);
     
     return (fw << 24) | (fr << 16) | (fg << 8) | fb;
+}
+
+uint8_t led_bitdepth(LEDType led_type) {
+    switch (led_type) {
+        case LED_Type_RGB:
+            return 24;
+        case LED_Type_GRB:
+            return 24;
+        case LED_Type_RGBW:
+            return 32;
+        default:
+            return 0;
+    }
 }
 
 void led_init_dma(LEDData* led_data) {
@@ -154,12 +172,8 @@ void led_init(LEDData* led_data, float_config* float_conf) {
     led_data->led_rear_count = float_conf->led_rear_count;
 
     // Init
-    int bits = 0;
-    if (led_data->led_type == LED_Type_RGB) {
-        bits = 24;
-    } else if (led_data->led_type == LED_Type_RGBW) {
-        bits = 32;
-    } else {
+    int bits = led_bitdepth(led_data->led_type);
+    if (bits == 0) {
         return;
     }
 
@@ -185,7 +199,7 @@ void led_init(LEDData* led_data, float_config* float_conf) {
         led_data->RGBdata[i] = 0;
     }
     for (int i = 0;i < led_data->ledbuf_len;i++) {
-        uint32_t tmp_color = led_rgb_to_local(0x00000000, 0x00, bits == 32);
+        uint32_t tmp_color = led_rgb_to_local(0x00000000, 0x00, led_data->led_type);
 
         for (int bit = 0;bit < bits;bit++) {
             if (tmp_color & (1 << (bits - 1))) {
@@ -217,14 +231,9 @@ void led_set_color(LEDData* led_data, int led, uint32_t color, uint32_t brightne
         }
         led_data->RGBdata[led] = color;
 
-        color = led_rgb_to_local(color, brightness, led_data->led_type == 2);
+        color = led_rgb_to_local(color, brightness, led_data->led_type);
 
-        int bits = 0;
-        if (led_data->led_type == 1) {
-            bits = 24;
-        } else {
-            bits = 32;
-        }
+        int bits = led_bitdepth(led_data->led_type);
 
         int bit;
         for (bit = 0;bit < bits;bit++) {
